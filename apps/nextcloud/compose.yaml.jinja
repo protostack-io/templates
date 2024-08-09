@@ -1,0 +1,66 @@
+volumes:
+  nextcloud:
+  db:
+  redis:
+
+services:
+  {%- if dbType == 'mariadb' %}
+  db:
+    image: mariadb:11.4
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    volumes:
+      - db:/var/lib/mysql
+    environment:
+      {% if useRandomDbRootPass -%}
+      - MARIADB_RANDOM_ROOT_PASSWORD=1
+      {% else -%}
+      - MARIADB_ROOT_PASSWORD={{ dbRootPass }}
+      {% endif -%}
+      - MARIADB_PASSWORD={{ dbPass }}
+      - MARIADB_DATABASE={{ dbName }}
+      - MARIADB_USER={{ dbUser }}
+  {% endif -%}
+  {%- if dbType == 'postgres' %}
+  db:
+    image: postgres:16.4
+    restart: always
+    volumes:
+      - db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB={{ dbName }}
+      - POSTGRES_USER={{ dbUser }}
+      - POSTGRES_PASSWORD={{ dbPass }}
+  {% endif -%}
+  redis:
+    image: redis:7.4
+    restart: always
+    command: --port 6379 --save 60 1 --loglevel warning
+    volumes:
+      - redis:/data
+
+  app:
+    image: nextcloud
+    restart: always
+    ports:
+      - 8080:80
+    links:
+      - db
+      - redis
+    volumes:
+      - nextcloud:/var/www/html
+    environment:
+      {% if dbType == 'mariadb' -%}
+      - MYSQL_DATABASE={{ dbName }}
+      - MYSQL_USER={{ dbUser }}
+      - MYSQL_PASSWORD={{ dbPass }}
+      - MYSQL_HOST={{ dbHost or 'db' }}
+      {% endif -%}
+      {% if dbType == 'postgres' -%}
+      - POSTGRES_DB={{ dbName }}
+      - POSTGRES_USER={{ dbUser }}
+      - POSTGRES_PASSWORD={{ dbPass }}
+      - POSTGRES_HOST={{ dbHost or 'db' }}
+      {% endif -%}
+      - REDIS_HOST=redis
+      - REDIS_HOST_PORT=6379
